@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - {{ school.name }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        #map { height: 400px; width: 100%; border-radius: 10px; border: 2px solid #ddd; }
+        .header-bg { background-color: #16A34A; color: white; padding: 30px; margin-bottom: 30px; }
+        .nav-tabs .nav-link.active { background-color: #f8f9fa; border-bottom-color: transparent; font-weight: bold; color: #16A34A; }
+        .nav-tabs .nav-link { color: #555; }
+        .table-container { max_height: 500px; overflow-y: auto; }
+    </style>
+</head>
+<body class="bg-light">
+
+    <div class="header-bg text-center shadow">
+        <h1><i class="fas fa-school"></i> {{ school.name }}</h1>
+        <p class="mb-0">Panneau d'Administration</p>
+    </div>
+
+    <div class="container mb-5">
+        
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} text-center shadow-sm">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <ul class="nav nav-tabs card-header-tabs" id="myTab" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="gps-tab" data-bs-toggle="tab" data-bs-target="#gps" type="button" role="tab"><i class="fas fa-map-marker-alt"></i> Localisation & Radius</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="list-tab" data-bs-toggle="tab" data-bs-target="#list" type="button" role="tab"><i class="fas fa-users"></i> Liste des Élèves ({{ students.count }})</button>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="card-body p-4">
+                <div class="tab-content" id="myTabContent">
+                    
+                    <div class="tab-pane fade show active" id="gps" role="tabpanel">
+                        <div class="alert alert-info"><i class="fas fa-info-circle"></i> Cliquez sur la carte pour définir l'emplacement exact de l'école.</div>
+                        <div id="map" class="mb-4"></div>
+                        
+                        <form method="POST">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="update_location"> <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Latitude</label>
+                                    <input type="text" name="latitude" id="lat" class="form-control" value="{{ school.latitude }}" readonly>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Longitude</label>
+                                    <input type="text" name="longitude" id="lng" class="form-control" value="{{ school.longitude }}" readonly>
+                                </div>
+                            </div>
+                            <div class="mb-4">
+                                <label class="form-label fw-bold">📏 Rayon (Mètres)</label>
+                                <input type="number" name="radius" class="form-control" value="{{ school.radius }}">
+                            </div>
+                            <button type="submit" class="btn btn-success w-100"><i class="fas fa-save"></i> Enregistrer Position</button>
+                        </form>
+                    </div>
+
+                    <div class="tab-pane fade" id="list" role="tabpanel">
+                        
+                        <div class="row mb-4">
+                            <div class="col-md-8">
+                                <form method="POST" enctype="multipart/form-data" class="d-flex gap-2">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="upload_csv">
+                                    <input type="file" name="file" class="form-control" required accept=".csv">
+                                    <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Importer CSV</button>
+                                </form>
+                                <div class="form-check mt-2">
+                                    <input class="form-check-input" type="checkbox" name="clear_existing" form="uploadForm" id="clearCheck">
+                                    <label class="form-check-label text-muted" for="clearCheck">Effacer l'ancienne liste avant d'importer ?</label>
+                                </div>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <form method="POST" onsubmit="return confirm('Voulez-vous vraiment TOUT effacer ?');">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="clear_list">
+                                    <button type="submit" class="btn btn-danger"><i class="fas fa-trash"></i> Vider la liste</button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <input type="text" id="searchInput" class="form-control mb-3" placeholder="🔍 Rechercher un élève...">
+                        <div class="table-container border rounded">
+                            <table class="table table-striped table-hover mb-0">
+                                <thead class="table-dark sticky-top">
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Nom</th>
+                                        <th>Prénom</th>
+                                        <th>Classe</th>
+                                        <th>Code Badge</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="studentsTable">
+                                    {% for s in students %}
+                                    <tr>
+                                        <td>{{ s.id }}</td>
+                                        <td>{{ s.last_name }}</td>
+                                        <td>{{ s.first_name }}</td>
+                                        <td><span class="badge bg-secondary">{{ s.class_name }}</span></td>
+                                        <td class="text-monospace">{{ s.code_id }}</td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="5" class="text-center py-4 text-muted">Aucun élève enregistré. Importez un fichier CSV.</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+        
+        <div class="text-center mt-4">
+            <a href="/admin/logout/" class="btn btn-outline-danger btn-sm">Se déconnecter</a>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // --- 1. MAP LOGIC ---
+        var currentLat = parseFloat("{{ school.latitude }}".replace(',', '.')) || 34.020882;
+        var currentLng = parseFloat("{{ school.longitude }}".replace(',', '.')) || -6.841650;
+
+        var map = L.map('map').setView([currentLat, currentLng], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        var marker = L.marker([currentLat, currentLng], {draggable: true}).addTo(map);
+
+        function updateInputs(lat, lng) {
+            document.getElementById('lat').value = lat;
+            document.getElementById('lng').value = lng;
+        }
+
+        marker.on('dragend', function(e) {
+            var pos = marker.getLatLng();
+            updateInputs(pos.lat, pos.lng);
+        });
+
+        map.on('click', function(e) {
+            marker.setLatLng(e.latlng);
+            updateInputs(e.latlng.lat, e.latlng.lng);
+        });
+
+        // --- 2. REFRESH MAP ON TAB SWITCH ---
+        // Leaflet كيتبلوكا إلا كان مخبي ف Tab، هاد الكود كيصلح المشكل
+        var triggerTabList = [].slice.call(document.querySelectorAll('#gps-tab'))
+        triggerTabList.forEach(function (triggerEl) {
+            triggerEl.addEventListener('shown.bs.tab', function (event) {
+                setTimeout(function(){ map.invalidateSize(); }, 200);
+            })
+        });
+
+        // --- 3. SEARCH FILTER ---
+        document.getElementById('searchInput').addEventListener('keyup', function() {
+            var value = this.value.toLowerCase();
+            var rows = document.querySelectorAll('#studentsTable tr');
+            rows.forEach(function(row) {
+                row.style.display = row.textContent.toLowerCase().includes(value) ? '' : 'none';
+            });
+        });
+    </script>
+</body>
+</html>

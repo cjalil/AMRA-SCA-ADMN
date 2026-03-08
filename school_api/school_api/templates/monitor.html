@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Suivi - {{ school.name }}</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background-color: #f4f6f9; 
+            margin: 0; 
+            padding: 5px; 
+        }
+
+        h1 { 
+            text-align: center; 
+            color: #2c3e50; 
+            margin: 10px 0; 
+            font-size: 1.1rem; 
+            text-transform: uppercase;
+        }
+
+        /* --- BOUTON TOGGLE FILTRE --- */
+        .toggle-btn {
+            width: 100%;
+            background-color: #34495e;
+            color: white;
+            border: none;
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+            font-size: 14px;
+            cursor: pointer;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .toggle-btn:after { content: '▼'; font-size: 12px; }
+        .toggle-btn.active:after { content: '▲'; }
+
+        /* --- CONTAINER DES FILTRES --- */
+        #filters-content {
+            display: none; 
+            background: white;
+            padding: 10px;
+            border-radius: 0 0 8px 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .filter-section-title { font-size: 12px; font-weight: bold; color: #7f8c8d; margin-bottom: 5px; text-transform: uppercase; }
+        .filter-group { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+
+        .checkbox-wrapper { 
+            display: flex; align-items: center; gap: 5px; font-size: 12px; 
+            background: #eee; padding: 6px 12px; border-radius: 20px; cursor: pointer; 
+            border: 1px solid transparent;
+            user-select: none;
+        }
+        input[type="radio"]:checked + span { font-weight: bold; color: #2980b9; }
+        .checkbox-wrapper:has(input:checked) { background-color: #d6eaf8; border-color: #3498db; }
+        .class-checkbox { transform: scale(1.1); }
+
+        /* --- TABLEAU COMPACT --- */
+        table { 
+            width: 100%; 
+            table-layout: fixed; /* Force la largeur fixe */
+            border-collapse: collapse; 
+            background: white; 
+            border-radius: 8px; 
+            overflow: hidden; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        th, td { 
+            padding: 8px 4px; 
+            text-align: center; 
+            border-bottom: 1px solid #eee; 
+            font-size: 12px; 
+            word-wrap: break-word; /* Coupe les mots trop longs */
+        }
+
+        th { background-color: #2c3e50; color: white; font-size: 11px; text-transform: uppercase; }
+
+        /* Largeur des colonnes optimisée mobile */
+        th:nth-child(1) { width: 18%; } /* Heure */
+        th:nth-child(2) { width: 45%; } /* Nom */
+        th:nth-child(3) { width: 15%; } /* Classe */
+        th:nth-child(4) { width: 22%; } /* Etat */
+
+        /* Style du dernier arrivant */
+        tbody tr:first-child td { 
+            background-color: #e8f8f5; 
+            font-weight: bold; 
+            border-left: 3px solid #2ecc71; 
+            font-size: 13px;
+        }
+
+        .badge { display: inline-block; padding: 3px 6px; border-radius: 4px; color: white; font-size: 10px; font-weight: bold; }
+        .status-pending { background-color: #e67e22; }
+        .status-done { background-color: #2ecc71; }
+        .time { color: #555; font-weight: bold; }
+
+    </style>
+</head>
+<body>
+
+    <input type="hidden" id="school-key" value="{{ school_key }}">
+
+    <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin: 10px 0;">
+        
+        {% if school.logo %}
+            <img src="{{ school.logo.url }}" alt="Logo" style="max-height: 50px; width: auto;">
+        {% else %}
+            <span style="font-size: 24px;">🚀</span>
+        {% endif %}
+
+        <h1 style="margin: 0; font-size: 1.2rem; color: #2c3e50; text-transform: uppercase;">
+            SUIVI - {{ school.name }}
+        </h1>
+
+    </div>
+
+    <button class="toggle-btn" onclick="toggleFilters(this)">
+        🔧 FILTRER (Temps & Classe)
+    </button>
+
+    <div id="filters-content">
+        
+        <div>
+            <div class="filter-section-title">🕒 PÉRIODE :</div>
+            <div class="filter-group">
+                <label class="checkbox-wrapper">
+                    <input type="radio" name="time_slot" value="all" onchange="saveAndRefresh()"> <span>TOUTE LA JOURNÉE</span>
+                </label>
+                <label class="checkbox-wrapper">
+                    <input type="radio" name="time_slot" value="morning" onchange="saveAndRefresh()"> <span>MATINÉE (08h-14h)</span>
+                </label>
+                <label class="checkbox-wrapper">
+                    <input type="radio" name="time_slot" value="afternoon" onchange="saveAndRefresh()"> <span>APRÈS-MIDI (14h-19h)</span>
+                </label>
+            </div>
+        </div>
+
+        <hr style="width:100%; border:0; border-top:1px dashed #ccc;">
+
+        <div>
+            <div class="filter-section-title">🏫 CLASSES :</div>
+            <div class="filter-group">
+                <label class="checkbox-wrapper" style="background:#ddd; font-weight:bold;">
+                    <input type="checkbox" id="check-all" class="class-checkbox" onchange="toggleAll(this)"> TOUT
+                </label>
+                
+                {% for classe in classes %}
+                <label class="checkbox-wrapper">
+                    <input type="checkbox" class="class-checkbox filter-item" value="{{ classe }}" onchange="saveAndRefresh()"> {{ classe }}
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Heure</th>
+                <th>Nom & Prénom</th>
+                <th>Cls</th>
+                <th>Etat</th>
+            </tr>
+        </thead>
+        <tbody id="table-body">
+            </tbody>
+    </table>
+
+    <script>
+        // Clés uniques pour stocker les filtres par école (pour éviter les conflits si on gère plusieurs écoles sur le même navigateur)
+        // On ajoute le school_key dans le nom du stockage
+        const CURRENT_SCHOOL_KEY = document.getElementById("school-key").value;
+        const STORAGE_KEY_CLASSES = 'amra_filters_classes_' + CURRENT_SCHOOL_KEY;
+        const STORAGE_KEY_TIME = 'amra_filters_time_' + CURRENT_SCHOOL_KEY;
+
+        function toggleFilters(btn) {
+            var content = document.getElementById("filters-content");
+            if (content.style.display === "flex") {
+                content.style.display = "none";
+                btn.classList.remove("active");
+            } else {
+                content.style.display = "flex";
+                btn.classList.add("active");
+            }
+        }
+
+        window.onload = function() {
+            loadFilters();
+            updateData(); 
+            setInterval(updateData, 3000); // Rafraîchir toutes les 3 secondes
+        };
+
+        function toggleAll(source) {
+            let checkboxes = document.getElementsByClassName('filter-item');
+            for(let box of checkboxes) box.checked = source.checked;
+            saveAndRefresh();
+        }
+
+        function saveAndRefresh() {
+            saveFilters();
+            updateData();
+        }
+
+        function saveFilters() {
+            // Sauvegarder Classes
+            let selectedClasses = [];
+            let checkboxes = document.getElementsByClassName('filter-item');
+            for (let box of checkboxes) if (box.checked) selectedClasses.push(box.value);
+            localStorage.setItem(STORAGE_KEY_CLASSES, JSON.stringify(selectedClasses));
+            
+            // Sauvegarder Temps
+            let timeSlot = document.querySelector('input[name="time_slot"]:checked').value;
+            localStorage.setItem(STORAGE_KEY_TIME, timeSlot);
+
+            checkSelectAllState();
+        }
+
+        function loadFilters() {
+            // Charger Classes
+            let storedClasses = localStorage.getItem(STORAGE_KEY_CLASSES);
+            let checkboxes = document.getElementsByClassName('filter-item');
+            if (storedClasses) {
+                let savedClasses = JSON.parse(storedClasses);
+                for (let box of checkboxes) box.checked = savedClasses.includes(box.value);
+            } else {
+                // Par défaut : tout coché
+                for (let box of checkboxes) box.checked = true;
+            }
+
+            // Charger Temps
+            let storedTime = localStorage.getItem(STORAGE_KEY_TIME) || 'all';
+            let radio = document.querySelector(`input[name="time_slot"][value="${storedTime}"]`);
+            if (radio) radio.checked = true;
+            else document.querySelector(`input[name="time_slot"][value="all"]`).checked = true;
+
+            checkSelectAllState();
+        }
+
+        function checkSelectAllState() {
+            let checkboxes = document.getElementsByClassName('filter-item');
+            let allChecked = true;
+            for (let box of checkboxes) if (!box.checked) { allChecked = false; break; }
+            document.getElementById('check-all').checked = allChecked;
+        }
+
+        function updateData() {
+            let selectedClasses = [];
+            let checkboxes = document.getElementsByClassName('filter-item');
+            for (let box of checkboxes) if (box.checked) selectedClasses.push(box.value);
+
+            let timeSlot = document.querySelector('input[name="time_slot"]:checked').value;
+
+            // 1. Récupérer l'API Key depuis le champ caché
+            var schoolKey = document.getElementById("school-key").value;
+
+            if (selectedClasses.length === 0) {
+                document.getElementById('table-body').innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px;">Sélectionnez une classe.</td></tr>';
+                return;
+            }
+
+            // 2. Appel AJAX vers l'URL spécifique à l'école
+            fetch(`/api/monitor/data/${schoolKey}/?classes=${selectedClasses.join(',')}&time_slot=${timeSlot}`)
+                .then(response => response.json())
+                .then(data => {
+                    const tbody = document.getElementById('table-body');
+                    tbody.innerHTML = ''; 
+
+                    if (data.requests.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:10px; font-size:12px;">Aucune sortie.</td></tr>';
+                        return;
+                    }
+
+                    data.requests.forEach(req => {
+                        let statusHtml = req.is_completed 
+                            ? '<span class="badge status-done">OK</span>' 
+                            : '<span class="badge status-pending">...</span>';
+
+                        let row = `
+                            <tr>
+                                <td class="time">${req.time}</td>
+                                <td>${req.student_name}</td>
+                                <td>${req.class_name}</td>
+                                <td>${statusHtml}</td>
+                            </tr>
+                        `;
+                        tbody.innerHTML += row;
+                    });
+                })
+                .catch(error => console.error('Erreur:', error));
+        }
+    </script>
+
+</body>
+</html>
